@@ -1,6 +1,33 @@
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { clearAuthError, loginUser } from "../redux/userSlice.js";
 
 function Login() {
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { status, error } = useSelector((state) => state.user);
+
+  useEffect(() => {
+    dispatch(clearAuthError());
+  }, [dispatch]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const result = await dispatch(
+      loginUser({
+        email: formData.get("email"),
+        password: formData.get("password"),
+      }),
+    );
+
+    if (loginUser.fulfilled.match(result)) {
+      navigate("/");
+    }
+  };
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#fff0f5] px-4 py-8">
       <section className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl shadow-rose-200/60">
@@ -25,7 +52,7 @@ function Login() {
             </p>
           </div>
 
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-700">
                 Email
@@ -35,6 +62,7 @@ function Login() {
                 name="email"
                 autoComplete="email"
                 placeholder="Enter your email"
+                required
                 className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
               />
             </label>
@@ -48,17 +76,28 @@ function Login() {
                 name="password"
                 autoComplete="current-password"
                 placeholder="Enter your password"
+                required
                 className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
               />
             </label>
 
             <button
-              type="button"
+              type="submit"
+              disabled={status === "loading"}
               className="mt-2 h-12 w-full rounded-lg bg-[#e576a3] text-sm font-semibold text-white shadow-md shadow-rose-200 transition hover:bg-[#d85b8e] focus:outline-none focus:ring-4 focus:ring-[#f8b3cd]/35"
             >
-              Log In
+              {status === "loading" ? "Logging in..." : "Log In"}
             </button>
           </form>
+
+          {error && (
+            <p
+              className="mt-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Don&apos;t have an account?{" "}

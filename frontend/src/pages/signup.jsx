@@ -1,6 +1,35 @@
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
+import { clearAuthError, registerUser } from "../redux/userSlice.js";
 
 function Signup() {
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { status, error } = useSelector((state) => state.user);
+
+  useEffect(() => {
+    dispatch(clearAuthError());
+  }, [dispatch]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const result = await dispatch(
+      registerUser({
+        username: formData.get("username"),
+        email: formData.get("email"),
+        password: formData.get("password"),
+      }),
+    );
+
+    if (registerUser.fulfilled.match(result)) {
+      navigate("/");
+    }
+  };
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#fff0f5] px-4 py-8">
       <section className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl shadow-rose-200/60">
@@ -25,7 +54,7 @@ function Signup() {
             </p>
           </div>
 
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-700">
                 Username
@@ -35,6 +64,8 @@ function Signup() {
                 name="username"
                 autoComplete="username"
                 placeholder="Enter your username"
+                required
+                minLength={2}
                 className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
               />
             </label>
@@ -48,6 +79,7 @@ function Signup() {
                 name="email"
                 autoComplete="email"
                 placeholder="Enter your email"
+                required
                 className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
               />
             </label>
@@ -61,17 +93,29 @@ function Signup() {
                 name="password"
                 autoComplete="new-password"
                 placeholder="Create a password"
+                minLength={6}
+                required
                 className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
               />
             </label>
 
             <button
-              type="button"
+              type="submit"
+              disabled={status === "loading"}
               className="mt-2 h-12 w-full rounded-lg bg-[#e576a3] text-sm font-semibold text-white shadow-md shadow-rose-200 transition hover:bg-[#d85b8e] focus:outline-none focus:ring-4 focus:ring-[#f8b3cd]/35"
             >
-              Sign Up
+              {status === "loading" ? "Creating account..." : "Sign Up"}
             </button>
           </form>
+
+          {error && (
+            <p
+              className="mt-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}
