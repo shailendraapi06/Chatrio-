@@ -1,30 +1,87 @@
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import {
   IoCameraOutline,
   IoChevronBackOutline,
 } from "react-icons/io5";
+import { clearAuthError, updateProfile } from "../redux/userSlice.js";
 
 function Profile() {
-  const { userData } = useSelector((state) => state.user);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState("");
+  const dispatch = useDispatch();
+  const { userData, status, error } = useSelector((state) => state.user);
+  const [username, setUsername] = useState(userData?.username || "");
+  const [email, setEmail] = useState(userData?.email || "");
+  const [photoPreview, setPhotoPreview] = useState(userData?.image || "");
+  const [selectedPhoto, setSelectedPhoto] = useState("");
+  const [formError, setFormError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (!selectedPhoto) {
-      setPhotoPreview("");
-      return undefined;
+    dispatch(clearAuthError());
+  }, [dispatch]);
+
+  useEffect(() => {
+    setUsername(userData?.username || "");
+    setEmail(userData?.email || "");
+    setPhotoPreview(userData?.image || "");
+    setSelectedPhoto("");
+  }, [userData]);
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setFormError("");
+    setSaved(false);
+    setSelectedPhoto("");
+    setPhotoPreview(userData?.image || "");
+
+    if (!file) {
+      return;
     }
 
-    const previewUrl = URL.createObjectURL(selectedPhoto);
-    setPhotoPreview(previewUrl);
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setFormError("Choose a PNG, JPEG, or WebP photo.");
+      return;
+    }
 
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [selectedPhoto]);
+    if (file.size > 1024 * 1024) {
+      setFormError("Profile photos must be 1 MB or smaller.");
+      return;
+    }
 
-  const username = userData?.username || "Chatrio member";
-  const initials = username.charAt(0).toUpperCase();
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        setFormError("Could not read this photo. Please try another file.");
+        return;
+      }
+      setSelectedPhoto(reader.result);
+      setPhotoPreview(reader.result);
+    };
+    reader.onerror = () => {
+      setFormError("Could not read this photo. Please try another file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError("");
+    setSaved(false);
+
+    const result = await dispatch(
+      updateProfile({
+        username: username.trim(),
+        email: email.trim(),
+        ...(selectedPhoto ? { image: selectedPhoto } : {}),
+      }),
+    );
+
+    if (updateProfile.fulfilled.match(result)) {
+      setSaved(true);
+    }
+  };
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#fff0f5] px-4 py-8 sm:px-6">
@@ -67,7 +124,9 @@ function Profile() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <span aria-hidden="true">{initials}</span>
+                  <span aria-hidden="true">
+                    {(username || "C").charAt(0).toUpperCase()}
+                  </span>
                 )}
               </div>
               <label className="absolute bottom-1 right-1 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border-4 border-white bg-[#e576a3] text-white shadow-md transition hover:scale-105 hover:bg-[#d85b8e] focus-within:ring-4 focus-within:ring-[#f8b3cd]/40">
@@ -75,28 +134,28 @@ function Profile() {
                 <span className="sr-only">Choose a profile photo</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp"
                   className="sr-only"
-                  onChange={(event) =>
-                    setSelectedPhoto(event.target.files?.[0] || null)
-                  }
+                  onChange={handlePhotoChange}
                 />
               </label>
             </div>
-            <p className="mt-5 text-lg font-bold text-slate-800">{username}</p>
+            <p className="mt-5 text-lg font-bold text-slate-800">
+              {username || "Your name"}
+            </p>
             <p className="mt-1 text-sm text-slate-500">Your Chatrio profile</p>
             <p className="mt-4 max-w-[210px] text-xs leading-5 text-slate-400">
-              Tap the camera to preview a photo from your device.
+              Choose a PNG, JPEG, or WebP photo up to 1 MB.
             </p>
           </div>
 
-          <div>
+          <form onSubmit={handleSubmit}>
             <div className="mb-6">
               <h2 className="text-lg font-bold text-slate-800">
                 Account details
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                These details are linked to your Chatrio account.
+                Edit your account details and save your profile.
               </p>
             </div>
 
@@ -107,9 +166,18 @@ function Profile() {
                 </span>
                 <input
                   type="text"
-                  value={userData?.username || ""}
-                  readOnly
-                  className="h-12 w-full rounded-lg border border-rose-100 bg-rose-50/50 px-4 text-sm text-slate-700 outline-none"
+                  name="username"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => {
+                    setUsername(event.target.value);
+                    setSaved(false);
+                    setFormError("");
+                  }}
+                  placeholder="Enter your username"
+                  minLength={2}
+                  required
+                  className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
                 />
               </label>
               <label className="block">
@@ -118,9 +186,17 @@ function Profile() {
                 </span>
                 <input
                   type="email"
-                  value={userData?.email || ""}
-                  readOnly
-                  className="h-12 w-full rounded-lg border border-rose-100 bg-rose-50/50 px-4 text-sm text-slate-700 outline-none"
+                  name="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setSaved(false);
+                    setFormError("");
+                  }}
+                  placeholder="Enter your email"
+                  required
+                  className="h-12 w-full rounded-lg border border-rose-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#e576a3] focus:ring-4 focus:ring-[#f8b3cd]/25"
                 />
               </label>
             </div>
@@ -133,7 +209,31 @@ function Profile() {
                 Your profile helps people know they&apos;re chatting with you.
               </p>
             </div>
-          </div>
+
+            <button
+              type="submit"
+              disabled={status === "loading"}
+              className="mt-6 h-12 w-full rounded-lg bg-[#e576a3] text-sm font-semibold text-white shadow-md shadow-rose-200 transition hover:bg-[#d85b8e] focus:outline-none focus:ring-4 focus:ring-[#f8b3cd]/35 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {status === "loading" ? "Saving..." : "Save profile"}
+            </button>
+            {(formError || error) && (
+              <p
+                className="mt-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700"
+                role="alert"
+              >
+                {formError || error}
+              </p>
+            )}
+            {saved && (
+              <p
+                className="mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+                role="status"
+              >
+                Profile saved successfully.
+              </p>
+            )}
+          </form>
         </div>
       </section>
     </main>

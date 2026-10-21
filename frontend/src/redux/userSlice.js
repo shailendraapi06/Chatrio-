@@ -42,6 +42,17 @@ export const fetchCurrentUser = createAsyncThunk(
   },
 );
 
+export const updateProfile = createAsyncThunk(
+  "user/updateProfile",
+  async (profileData) => {
+    const result = await apiRequest("/api/users/profile", {
+      method: "PUT",
+      body: JSON.stringify(profileData),
+    });
+    return result.user;
+  },
+);
+
 const userSlice = createSlice({
   name: "user",
   initialState: {
@@ -98,6 +109,18 @@ const userSlice = createSlice({
         state.userData = null;
       })
       .addCase(logoutUser.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message;
+      })
+      .addCase(updateProfile.pending, (state) => {
+        state.status = "loading";
+        state.error = null;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.userData = action.payload;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message;
       })
