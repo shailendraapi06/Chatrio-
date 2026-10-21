@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import SideBar from "./components/sideBar.jsx";
 import Login from "./pages/login.jsx";
 import Signup from "./pages/signup.jsx";
 import Profile from "./pages/profile.jsx";
@@ -11,6 +12,7 @@ function Home() {
   const navigate = useNavigate();
   const { userData, status, error, sessionStatus, sessionError } =
     useSelector((state) => state.user);
+  const [selectedContact, setSelectedContact] = useState(null);
 
   const handleLogout = async () => {
     const result = await dispatch(logoutUser());
@@ -52,36 +54,33 @@ function Home() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#fff0f5] px-4 py-8">
-      <section className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl shadow-rose-200/60">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#f8b3cd] to-[#e576a3] text-2xl font-bold text-white">
-          {userData.username.charAt(0).toUpperCase()}
-        </div>
-        <h1 className="mt-5 text-2xl font-bold text-slate-800">
-          Welcome, {userData.username}!
-        </h1>
-        <p className="mt-2 text-sm text-slate-500">
-          You&apos;re signed in to Chatrio.
-        </p>
-        <Link
-          to="/profile"
-          className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-lg border border-rose-200 text-sm font-semibold text-[#cc5687] transition hover:bg-rose-50"
-        >
-          View profile
-        </Link>
-        {error && (
-          <p className="mt-4 text-sm text-rose-700" role="alert">
-            {error}
+    <main className="flex h-screen flex-col overflow-hidden bg-[#e9edf4] md:flex-row">
+      <SideBar
+        userData={userData}
+        onLogout={handleLogout}
+        logoutLoading={status === "loading"}
+        selectedContact={selectedContact}
+        onSelectContact={setSelectedContact}
+      />
+      <section className="flex min-h-0 flex-1 items-center justify-center border-l border-[#d9dde5] px-6 text-center">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight text-[#393e49]">
+            {selectedContact
+              ? `Chat with ${selectedContact.name}`
+              : "Welcome to Chatrio"}
+          </h1>
+          <p className="mt-1.5 text-[20px] font-medium text-[#393e49]">
+            Chat Friendly !
           </p>
-        )}
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={status === "loading"}
-          className="mt-7 h-12 w-full rounded-lg bg-[#e576a3] text-sm font-semibold text-white shadow-md shadow-rose-200 transition hover:bg-[#d85b8e] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {status === "loading" ? "Logging out..." : "Log out"}
-        </button>
+          {error && (
+            <p
+              className="mt-5 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+        </div>
       </section>
     </main>
   );
