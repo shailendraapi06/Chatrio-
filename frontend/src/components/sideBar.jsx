@@ -12,6 +12,7 @@ const contacts = [
   { name: "Aditya", initials: "A", color: "bg-[#d5e1eb] text-[#49637b]" },
   { name: "Shizuka", initials: "S", color: "bg-[#efd6df] text-[#8a536c]" },
   { name: "Hulk", initials: "H", color: "bg-[#d5e7cf] text-[#4c7045]" },
+  { name: "Ankush Sahu", initials: "AS", color: "bg-[#e7d9ef] text-[#6e537c]" },
 ];
 
 function SideBar({
@@ -20,6 +21,7 @@ function SideBar({
   logoutLoading,
   selectedContact,
   onSelectContact,
+  className = "",
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -31,9 +33,12 @@ function SideBar({
       ),
     [query],
   );
+  const hasSearchQuery = query.trim().length > 0;
 
   return (
-    <aside className="relative flex h-[62%] w-full shrink-0 flex-col overflow-hidden bg-[#f8f5f7] md:h-screen md:w-[30%] md:min-w-[280px] md:max-w-[320px]">
+    <aside
+      className={`relative h-dvh w-full shrink-0 flex-col overflow-hidden bg-[#f8f5f7] md:w-[30%] md:min-w-[280px] md:max-w-[320px] ${className}`}
+    >
       <header className="relative z-10 h-[200px] shrink-0 rounded-b-[78px] bg-[#f7bfd3] px-4 pt-9 shadow-[0_6px_9px_rgba(40,40,50,0.22)]">
         <div>
           <Link
@@ -106,22 +111,36 @@ function SideBar({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-[9px] pb-16 pt-3.5">
-        <div className="flex flex-col gap-3">
+      <div
+        className={`min-h-0 flex-1 overflow-y-auto pb-16 ${
+          hasSearchQuery
+            ? "bg-white px-[9px] pt-1"
+            : "bg-[#f8f5f7] px-[9px] pt-3.5"
+        }`}
+      >
+        <div className={hasSearchQuery ? "flex flex-col" : "flex flex-col gap-3"}>
           {filteredContacts.map((contact) => (
             <button
               key={contact.name}
               type="button"
               onClick={() => onSelectContact(contact)}
               aria-pressed={selectedContact?.name === contact.name}
-              className={`flex h-[40px] w-full shrink-0 items-center gap-2 rounded-full bg-white pr-4 text-left shadow-[0_5px_8px_rgba(40,40,50,0.2)] transition hover:-translate-y-0.5 ${
-                selectedContact?.name === contact.name
-                  ? "ring-2 ring-[#e576a3]"
-                  : ""
-              }`}
+              className={
+                hasSearchQuery
+                  ? `flex h-12 w-full shrink-0 items-center gap-2 border-b border-[#d8d8dc] px-1 text-left transition hover:bg-[#fff4f8] ${
+                      selectedContact?.name === contact.name
+                        ? "bg-[#fff0f5]"
+                        : ""
+                    }`
+                  : `flex h-[40px] w-full shrink-0 items-center gap-2 rounded-full bg-white pr-4 text-left shadow-[0_5px_8px_rgba(40,40,50,0.2)] transition hover:-translate-y-0.5 ${
+                      selectedContact?.name === contact.name
+                        ? "ring-2 ring-[#e576a3]"
+                        : ""
+                    }`
+              }
             >
               <span
-                className={`flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${contact.color}`}
+                className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${contact.color}`}
                 aria-hidden="true"
               >
                 {contact.initials}
