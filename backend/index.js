@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "node:http";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import authRouter from "./routes/auth.route.js";
@@ -6,6 +7,8 @@ import userRouter from "./routes/user.route.js";
 import messageRouter from "./routes/message.route.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import { Server } from "socket.io";
+import { attachPresence } from "./socket/presence.js";
 
 dotenv.config();
 
@@ -16,6 +19,7 @@ const allowedOrigins = new Set([
 ]);
 
 const app = express();
+const httpServer = createServer(app);
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -34,7 +38,15 @@ app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/v1/message", messageRouter);
 
+const io = new Server(httpServer, {
+  cors: {
+    origin: [...allowedOrigins],
+    credentials: true,
+  },
+});
+attachPresence(io);
+
 await connectDB();
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

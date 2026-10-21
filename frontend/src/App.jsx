@@ -12,6 +12,7 @@ import {
   fetchConversationMessages,
   sendConversationMessage,
 } from "./redux/api.js";
+import { connectPresenceSocket } from "./realtime/presenceSocket.js";
 
 function Home() {
   const dispatch = useDispatch();
@@ -25,6 +26,51 @@ function Home() {
   const [messagesByContact, setMessagesByContact] = useState({});
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState("");
+  const [onlineUsers, setOnlineUsers] = useState(() => new Set());
+  const [presenceError, setPresenceError] = useState("");
+
+  useEffect(() => {
+    setOnlineUsers(new Set());
+    const socket = connectPresenceSocket();
+
+    const handleInitialPresence = ({ onlineUsers: currentOnlineUsers = [] }) => {
+      setOnlineUsers(new Set(currentOnlineUsers.map(String)));
+      setPresenceError("");
+    };
+    const handleUserOnline = ({ userId }) => {
+      if (userId) {
+        setOnlineUsers((currentUsers) => new Set(currentUsers).add(String(userId)));
+      }
+    };
+    const handleUserOffline = ({ userId }) => {
+      if (userId) {
+        setOnlineUsers((currentUsers) => {
+          const nextUsers = new Set(currentUsers);
+          nextUsers.delete(String(userId));
+          return nextUsers;
+        });
+      }
+    };
+    const handleConnectionError = (socketError) => {
+      setPresenceError(socketError.message || "Presence connection failed.");
+    };
+    const handleConnect = () => setPresenceError("");
+
+    socket.on("presence:initial", handleInitialPresence);
+    socket.on("presence:online", handleUserOnline);
+    socket.on("presence:offline", handleUserOffline);
+    socket.on("connect_error", handleConnectionError);
+    socket.on("connect", handleConnect);
+
+    return () => {
+      socket.off("presence:initial", handleInitialPresence);
+      socket.off("presence:online", handleUserOnline);
+      socket.off("presence:offline", handleUserOffline);
+      socket.off("connect_error", handleConnectionError);
+      socket.off("connect", handleConnect);
+      socket.disconnect();
+    };
+  }, [userData.id]);
 
   useEffect(() => {
     let active = true;
@@ -165,6 +211,8 @@ function Home() {
         contacts={contacts}
         contactsLoading={contactsLoading}
         contactsError={contactsError}
+        presenceError={presenceError}
+        onlineUsers={onlineUsers}
         onLogout={handleLogout}
         logoutLoading={status === "loading"}
         selectedContact={selectedContact}
@@ -177,6 +225,7 @@ function Home() {
           messages={messagesByContact[selectedContact.id] || []}
           loading={messagesLoading}
           error={messagesError}
+          isOnline={onlineUsers.has(String(selectedContact.id))}
           onSendMessage={handleSendMessage}
           onBack={() => setSelectedContact(null)}
         />

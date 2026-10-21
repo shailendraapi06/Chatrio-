@@ -15,11 +15,47 @@ const avatarColors = [
   "bg-[#e7d9ef] text-[#6e537c]",
 ];
 
+function ContactAvatar({ contact, colorClass, online }) {
+  const initials = contact.username
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <span className="relative h-[38px] w-[38px] shrink-0">
+      {contact.image ? (
+        <img
+          src={contact.image}
+          alt=""
+          className="h-full w-full rounded-full object-cover"
+        />
+      ) : (
+        <span
+          className={`flex h-full w-full items-center justify-center rounded-full text-[12px] font-bold ${colorClass}`}
+          aria-hidden="true"
+        >
+          {initials}
+        </span>
+      )}
+      {online && (
+        <span
+          aria-label="Online"
+          className="absolute bottom-0 right-0 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#32e84a]"
+        />
+      )}
+    </span>
+  );
+}
+
 function SideBar({
   userData,
   contacts,
   contactsLoading,
   contactsError,
+  presenceError,
+  onlineUsers,
   onLogout,
   logoutLoading,
   selectedContact,
@@ -53,21 +89,29 @@ function SideBar({
           </Link>
         </div>
 
-        <Link
-          to="/profile"
-          aria-label="Open your profile"
-          className="absolute right-4 top-[55px] flex h-[42px] w-[42px] items-center justify-center overflow-hidden rounded-full border border-white/80 bg-white text-base font-bold text-[#a83d69] shadow-[0_4px_8px_rgba(40,40,50,0.2)]"
-        >
-          {userData?.image ? (
-            <img
-              src={userData.image}
-              alt=""
-              className="h-full w-full object-cover"
+        <span className="absolute right-4 top-[55px]">
+          <Link
+            to="/profile"
+            aria-label="Open your profile"
+            className="flex h-[42px] w-[42px] items-center justify-center overflow-hidden rounded-full border border-white/80 bg-white text-base font-bold text-[#a83d69] shadow-[0_4px_8px_rgba(40,40,50,0.2)]"
+          >
+            {userData?.image ? (
+              <img
+                src={userData.image}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              username.charAt(0).toUpperCase()
+            )}
+          </Link>
+          {onlineUsers.has(String(userData?.id)) && (
+            <span
+              aria-label="Online"
+              className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-[#32e84a]"
             />
-          ) : (
-            username.charAt(0).toUpperCase()
           )}
-        </Link>
+        </span>
 
         <h1 className="mt-3 truncate text-[17px] font-bold text-[#34343a]">
           Hii, {username}
@@ -132,6 +176,11 @@ function SideBar({
               {contactsError}
             </p>
           )}
+          {presenceError && (
+            <p className="px-3 pb-2 text-center text-xs text-rose-700" role="alert">
+              Presence unavailable: {presenceError}
+            </p>
+          )}
           {!contactsLoading && !contactsError && filteredContacts.map((contact, index) => (
             <button
               key={contact.id}
@@ -152,25 +201,11 @@ function SideBar({
                     }`
               }
             >
-              {contact.image ? (
-                <img
-                  src={contact.image}
-                  alt=""
-                  className="h-[38px] w-[38px] shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <span
-                  className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${avatarColors[index % avatarColors.length]}`}
-                  aria-hidden="true"
-                >
-                  {contact.username
-                    .split(/\s+/)
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase()}
-                </span>
-              )}
+              <ContactAvatar
+                contact={contact}
+                colorClass={avatarColors[index % avatarColors.length]}
+                online={onlineUsers.has(String(contact.id))}
+              />
               <span className="truncate text-[13px] font-semibold text-[#34343a]">
                 {contact.username}
               </span>

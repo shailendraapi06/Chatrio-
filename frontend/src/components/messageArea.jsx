@@ -42,6 +42,7 @@ function MessageArea({
   messages,
   loading,
   error,
+  isOnline,
   onSendMessage,
   onBack,
 }) {
@@ -97,7 +98,15 @@ function MessageArea({
         >
           <IoArrowBackOutline aria-hidden="true" className="h-5 w-5" />
         </button>
-        <Avatar name={contact.username} image={contact.image} />
+        <span className="relative h-10 w-10 shrink-0">
+          <Avatar name={contact.username} image={contact.image} />
+          {isOnline && (
+            <span
+              aria-label="Online"
+              className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-[#32e84a]"
+            />
+          )}
+        </span>
         <h1 className="truncate text-[15px] font-semibold text-[#34343a]">
           {contact.username}
         </h1>

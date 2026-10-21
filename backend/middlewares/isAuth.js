@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import verifyAuthToken from "../config/verifyAuthToken.js";
 
 const isAuth = (req, res, next) => {
   const token = req.cookies?.token;
@@ -7,8 +7,7 @@ const isAuth = (req, res, next) => {
   }
 
   try {
-    const verifiedToken = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = verifiedToken.userId;
+    req.userId = verifyAuthToken(token);
     return next();
   } catch {
     return res.status(401).json({ message: "Not authenticated!" });
