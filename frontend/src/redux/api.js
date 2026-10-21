@@ -22,3 +22,26 @@ export async function apiRequest(path, options = {}) {
 
   return result;
 }
+
+export async function fetchContacts() {
+  const result = await apiRequest("/api/users/contacts");
+  return result.users;
+}
+
+export async function fetchConversationMessages(userId) {
+  const result = await apiRequest(
+    `/api/v1/message/get/${encodeURIComponent(userId)}`,
+  );
+  return result.messages;
+}
+
+export async function sendConversationMessage(userId, message) {
+  const result = await apiRequest(
+    `/api/v1/message/send/${encodeURIComponent(userId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    },
+  );
+  return result.newMessage;
+}

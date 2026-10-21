@@ -6,17 +6,20 @@ import {
   IoCloseOutline,
 } from "react-icons/io5";
 
-const contacts = [
-  { name: "Virtual Code", initials: "VC", color: "bg-[#d8e6cf] text-[#496147]" },
-  { name: "Krishna", initials: "K", color: "bg-[#f1d8c4] text-[#815b3f]" },
-  { name: "Aditya", initials: "A", color: "bg-[#d5e1eb] text-[#49637b]" },
-  { name: "Shizuka", initials: "S", color: "bg-[#efd6df] text-[#8a536c]" },
-  { name: "Hulk", initials: "H", color: "bg-[#d5e7cf] text-[#4c7045]" },
-  { name: "Ankush Sahu", initials: "AS", color: "bg-[#e7d9ef] text-[#6e537c]" },
+const avatarColors = [
+  "bg-[#d8e6cf] text-[#496147]",
+  "bg-[#f1d8c4] text-[#815b3f]",
+  "bg-[#d5e1eb] text-[#49637b]",
+  "bg-[#efd6df] text-[#8a536c]",
+  "bg-[#d5e7cf] text-[#4c7045]",
+  "bg-[#e7d9ef] text-[#6e537c]",
 ];
 
 function SideBar({
   userData,
+  contacts,
+  contactsLoading,
+  contactsError,
   onLogout,
   logoutLoading,
   selectedContact,
@@ -29,7 +32,7 @@ function SideBar({
   const filteredContacts = useMemo(
     () =>
       contacts.filter((contact) =>
-        contact.name.toLowerCase().includes(query.trim().toLowerCase()),
+        contact.username.toLowerCase().includes(query.trim().toLowerCase()),
       ),
     [query],
   );
@@ -119,38 +122,63 @@ function SideBar({
         }`}
       >
         <div className={hasSearchQuery ? "flex flex-col" : "flex flex-col gap-3"}>
-          {filteredContacts.map((contact) => (
+          {contactsLoading && (
+            <p className="px-3 py-5 text-center text-sm text-[#62626b]">
+              Loading contacts...
+            </p>
+          )}
+          {contactsError && (
+            <p className="px-3 py-5 text-center text-sm text-rose-700" role="alert">
+              {contactsError}
+            </p>
+          )}
+          {!contactsLoading && !contactsError && filteredContacts.map((contact, index) => (
             <button
-              key={contact.name}
+              key={contact.id}
               type="button"
               onClick={() => onSelectContact(contact)}
-              aria-pressed={selectedContact?.name === contact.name}
+              aria-pressed={selectedContact?.id === contact.id}
               className={
                 hasSearchQuery
                   ? `flex h-12 w-full shrink-0 items-center gap-2 border-b border-[#d8d8dc] px-1 text-left transition hover:bg-[#fff4f8] ${
-                      selectedContact?.name === contact.name
+                      selectedContact?.id === contact.id
                         ? "bg-[#fff0f5]"
                         : ""
                     }`
                   : `flex h-[40px] w-full shrink-0 items-center gap-2 rounded-full bg-white pr-4 text-left shadow-[0_5px_8px_rgba(40,40,50,0.2)] transition hover:-translate-y-0.5 ${
-                      selectedContact?.name === contact.name
+                      selectedContact?.id === contact.id
                         ? "ring-2 ring-[#e576a3]"
                         : ""
                     }`
               }
             >
-              <span
-                className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${contact.color}`}
-                aria-hidden="true"
-              >
-                {contact.initials}
-              </span>
+              {contact.image ? (
+                <img
+                  src={contact.image}
+                  alt=""
+                  className="h-[38px] w-[38px] shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span
+                  className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${avatarColors[index % avatarColors.length]}`}
+                  aria-hidden="true"
+                >
+                  {contact.username
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </span>
+              )}
               <span className="truncate text-[13px] font-semibold text-[#34343a]">
-                {contact.name}
+                {contact.username}
               </span>
             </button>
           ))}
-          {filteredContacts.length === 0 && (
+          {!contactsLoading &&
+            !contactsError &&
+            filteredContacts.length === 0 && (
             <p className="px-3 py-5 text-center text-sm text-[#62626b]">
               No contacts found.
             </p>

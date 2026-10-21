@@ -7,42 +7,11 @@ import Login from "./pages/login.jsx";
 import Signup from "./pages/signup.jsx";
 import Profile from "./pages/profile.jsx";
 import { fetchCurrentUser, logoutUser } from "./redux/userSlice.js";
-
-const demoMessagesByContact = {
-  "Virtual Code": [
-    {
-      id: "virtual-1",
-      sender: "contact",
-      text: "Hey! Are you working on the project?",
-    },
-    {
-      id: "virtual-2",
-      sender: "current",
-      text: "Yes, just polishing the chat UI.",
-    },
-  ],
-  Krishna: [
-    { id: "krishna-1", sender: "contact", text: "Hi! How are you doing?" },
-    { id: "krishna-2", sender: "current", text: "Doing great, thanks 😊" },
-  ],
-  Aditya: [
-    {
-      id: "aditya-1",
-      sender: "contact",
-      text: "Did you get a chance to see the update?",
-    },
-  ],
-  Shizuka: [
-    { id: "shizuka-1", sender: "contact", text: "That sounds lovely!" },
-    { id: "shizuka-2", sender: "current", text: "I'll share the details soon." },
-  ],
-  Hulk: [
-    { id: "hulk-1", sender: "contact", text: "hello hulk . natasa" },
-  ],
-  "Ankush Sahu": [
-    { id: "ankush-1", sender: "contact", text: "Welcome to Chatrio!" },
-  ],
-};
+import {
+  fetchContacts,
+  fetchConversationMessages,
+  sendConversationMessage,
+} from "./redux/api.js";
 
 function Home() {
   const dispatch = useDispatch();
@@ -50,15 +19,86 @@ function Home() {
   const { userData, status, error, sessionStatus, sessionError } =
     useSelector((state) => state.user);
   const [selectedContact, setSelectedContact] = useState(null);
-  const [messagesByContact, setMessagesByContact] = useState(
-    () =>
-      Object.fromEntries(
-        Object.entries(demoMessagesByContact).map(([name, messages]) => [
-          name,
-          [...messages],
-        ]),
-      ),
-  );
+  const [contacts, setContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [contactsError, setContactsError] = useState("");
+  const [messagesByContact, setMessagesByContact] = useState({});
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setContactsLoading(true);
+    setContactsError("");
+
+    fetchContacts()
+      .then((users) => {
+        if (active) {
+          setContacts(users);
+        }
+      })
+      .catch((fetchError) => {
+        if (active) {
+          setContactsError(fetchError.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setContactsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userData.id]);
+
+  useEffect(() => {
+    if (!selectedContact) {
+      setMessagesLoading(false);
+      setMessagesError("");
+      return undefined;
+    }
+
+    let active = true;
+    setMessagesLoading(true);
+    setMessagesError("");
+
+    fetchConversationMessages(selectedContact.id)
+      .then((messages) => {
+        if (active) {
+          setMessagesByContact((currentMessages) => ({
+            ...currentMessages,
+            [selectedContact.id]: [
+              ...messages,
+              ...(currentMessages[selectedContact.id] || []).filter(
+                (existingMessage) =>
+                  !messages.some(
+                    (message) => message._id === existingMessage._id,
+                  ),
+              ),
+            ].sort(
+              (first, second) =>
+                new Date(first.createdAt || 0) - new Date(second.createdAt || 0),
+            ),
+          }));
+        }
+      })
+      .catch((fetchError) => {
+        if (active) {
+          setMessagesError(fetchError.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setMessagesLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedContact]);
 
   const handleLogout = async () => {
     const result = await dispatch(logoutUser());
@@ -67,14 +107,22 @@ function Home() {
     }
   };
 
-  const handleSendMessage = (message) => {
-    setMessagesByContact((currentMessages) => ({
-      ...currentMessages,
-      [selectedContact.name]: [
-        ...(currentMessages[selectedContact.name] || []),
-        message,
-      ],
-    }));
+  const handleSendMessage = async (text) => {
+    const savedMessage = await sendConversationMessage(
+      selectedContact.id,
+      text,
+    );
+    setMessagesByContact((currentMessages) => {
+      const existingMessages = currentMessages[selectedContact.id] || [];
+      if (existingMessages.some((message) => message._id === savedMessage._id)) {
+        return currentMessages;
+      }
+
+      return {
+        ...currentMessages,
+        [selectedContact.id]: [...existingMessages, savedMessage],
+      };
+    });
   };
 
   if (
@@ -114,6 +162,9 @@ function Home() {
       <SideBar
         className={selectedContact ? "hidden md:flex" : "flex"}
         userData={userData}
+        contacts={contacts}
+        contactsLoading={contactsLoading}
+        contactsError={contactsError}
         onLogout={handleLogout}
         logoutLoading={status === "loading"}
         selectedContact={selectedContact}
@@ -123,7 +174,9 @@ function Home() {
         <MessageArea
           contact={selectedContact}
           currentUser={userData}
-          messages={messagesByContact[selectedContact.name] || []}
+          messages={messagesByContact[selectedContact.id] || []}
+          loading={messagesLoading}
+          error={messagesError}
           onSendMessage={handleSendMessage}
           onBack={() => setSelectedContact(null)}
         />

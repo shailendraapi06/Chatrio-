@@ -40,13 +40,14 @@ function MessageArea({
   contact,
   currentUser,
   messages,
+  loading,
+  error,
   onSendMessage,
   onBack,
 }) {
   const [draft, setDraft] = useState("");
-  const [attachment, setAttachment] = useState(null);
-  const [attachmentError, setAttachmentError] = useState("");
-  const fileInputRef = useRef(null);
+  const [sendError, setSendError] = useState("");
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
   const currentUserName = currentUser?.username || "You";
   const currentUserImage = currentUser?.image || "";
@@ -55,23 +56,21 @@ function MessageArea({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const text = draft.trim();
-    if (!text && !attachment) {
+    if (!text || sending) {
       return;
     }
 
-    onSendMessage({
-      id: `${Date.now()}-${Math.random()}`,
-      sender: "current",
-      ...(text ? { text } : {}),
-      ...(attachment ? { image: attachment } : {}),
-    });
-    setDraft("");
-    setAttachment(null);
-    setAttachmentError("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    setSending(true);
+    setSendError("");
+    try {
+      await onSendMessage(text);
+      setDraft("");
+    } catch (error) {
+      setSendError(error.message || "Unable to send message.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -87,37 +86,6 @@ function MessageArea({
     }
   };
 
-  const handleAttachment = (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    setAttachmentError("");
-    if (!file) {
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      setAttachmentError("Choose an image file.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setAttachmentError("Images must be 5 MB or smaller.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAttachment(reader.result);
-      } else {
-        setAttachmentError("Could not read this image. Please try again.");
-      }
-    };
-    reader.onerror = () => {
-      setAttachmentError("Could not read this image. Please try again.");
-    };
-    reader.readAsDataURL(file);
-  };
-
   return (
     <section className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col bg-[#e9edf4]">
       <header className="relative z-10 flex h-[72px] shrink-0 items-center gap-3 rounded-b-[24px] bg-[#f7bfd3] px-4 shadow-[0_4px_8px_rgba(40,40,50,0.18)] sm:px-6">
@@ -129,9 +97,9 @@ function MessageArea({
         >
           <IoArrowBackOutline aria-hidden="true" className="h-5 w-5" />
         </button>
-        <Avatar name={contact.name} image={contact.image} />
+        <Avatar name={contact.username} image={contact.image} />
         <h1 className="truncate text-[15px] font-semibold text-[#34343a]">
-          {contact.name}
+          {contact.username}
         </h1>
       </header>
 
@@ -139,24 +107,34 @@ function MessageArea({
         className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
         aria-live="polite"
       >
-        {messages.length === 0 ? (
+        {loading ? (
           <p className="pt-6 text-center text-sm text-[#62626b]">
-            No messages yet. Say hello to {contact.name}!
+            Loading messages...
+          </p>
+        ) : error ? (
+          <p className="pt-6 text-center text-sm text-rose-700" role="alert">
+            {error}
+          </p>
+        ) : messages.length === 0 ? (
+          <p className="pt-6 text-center text-sm text-[#62626b]">
+            No messages yet. Say hello to {contact.username}!
           </p>
         ) : (
           <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
             {messages.map((message) => {
-              const isCurrentUser = message.sender === "current";
+              const isCurrentUser =
+                message.sender === "current" ||
+                String(message.senderId) === String(currentUser.id);
               const senderName = isCurrentUser
                 ? currentUserName
-                : contact.name;
+                : contact.username;
               const senderImage = isCurrentUser
                 ? currentUserImage
                 : contact.image;
 
               return (
                 <div
-                  key={message.id}
+                  key={message._id || message.id}
                   className={`flex items-end gap-2 ${
                     isCurrentUser ? "justify-end" : "justify-start"
                   }`}
@@ -175,19 +153,10 @@ function MessageArea({
                         : "rounded-bl-md bg-[#f9dce8] text-[#34343a]"
                     }`}
                   >
-                    {message.text && (
+                    {(message.message || message.text) && (
                       <p className="whitespace-pre-wrap break-words">
-                        {message.text}
+                        {message.message || message.text}
                       </p>
-                    )}
-                    {message.image && (
-                      <img
-                        src={message.image}
-                        alt="Shared in conversation"
-                        className={`max-h-52 max-w-full rounded-lg object-cover ${
-                          message.text ? "mt-2" : ""
-                        }`}
-                      />
                     )}
                   </div>
                   {isCurrentUser && (
@@ -206,28 +175,9 @@ function MessageArea({
       </div>
 
       <div className="shrink-0 px-3 pb-3 pt-2 sm:px-5 sm:pb-4">
-        {attachment && (
-          <div className="mx-2 mb-2 flex items-center gap-3 rounded-xl bg-white/80 p-2">
-            <img
-              src={attachment}
-              alt="Selected attachment preview"
-              className="h-14 w-20 rounded-md object-cover"
-            />
-            <span className="flex-1 text-xs text-[#62626b]">
-              Image ready to send
-            </span>
-            <button
-              type="button"
-              onClick={() => setAttachment(null)}
-              className="px-2 text-sm font-semibold text-[#a83d69]"
-            >
-              Remove
-            </button>
-          </div>
-        )}
-        {attachmentError && (
+        {sendError && (
           <p className="mx-2 mb-2 text-xs text-rose-700" role="alert">
-            {attachmentError}
+            {sendError}
           </p>
         )}
         <form
@@ -254,29 +204,22 @@ function MessageArea({
             }}
             onKeyDown={handleKeyDown}
             placeholder="Message"
-            aria-label={`Message ${contact.name}`}
+            aria-label={`Message ${contact.username}`}
             rows={1}
             className="max-h-24 min-h-8 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[13px] leading-5 text-[#34343a] outline-none placeholder:text-[#6d5862]"
           />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleAttachment}
-            className="sr-only"
-            aria-label="Choose an image attachment"
-          />
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            disabled
             aria-label="Attach an image"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#743d55] transition hover:bg-white/30"
+            title="Image messages are not supported yet"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#743d55] transition hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <IoImageOutline aria-hidden="true" className="h-5 w-5" />
           </button>
           <button
             type="submit"
-            disabled={!draft.trim() && !attachment}
+            disabled={!draft.trim() || sending}
             aria-label="Send message"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#743d55] transition hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
