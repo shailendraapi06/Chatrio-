@@ -51,6 +51,8 @@ export const attachPresence = (io) => {
     let userSockets = socketsByUser.get(userId);
     const becameOnline = !userSockets;
 
+    socket.join(`user:${userId}`);
+
     if (!userSockets) {
       userSockets = new Set();
       socketsByUser.set(userId, userSockets);

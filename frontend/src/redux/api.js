@@ -40,7 +40,7 @@ export async function sendConversationMessage(userId, message) {
     `/api/v1/message/send/${encodeURIComponent(userId)}`,
     {
       method: "POST",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(message),
     },
   );
   return result.newMessage;

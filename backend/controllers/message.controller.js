@@ -16,6 +16,7 @@ export const sendMessage = async (req, res) => {
   const receiverId = req.params.id;
   const messageText =
     typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  const image = req.body?.image;
 
   if (!isValidObjectId(senderId) || !isValidObjectId(receiverId)) {
     return res.status(400).json({ success: false, message: "Invalid user ID." });
@@ -28,10 +29,10 @@ export const sendMessage = async (req, res) => {
     });
   }
 
-  if (!messageText) {
+  if (!messageText && image === undefined) {
     return res
       .status(400)
-      .json({ success: false, message: "Message cannot be empty." });
+      .json({ success: false, message: "A message or image is required." });
   }
 
   if (messageText.length > 5000) {
@@ -39,6 +40,26 @@ export const sendMessage = async (req, res) => {
       success: false,
       message: "Message must be 5000 characters or fewer.",
     });
+  }
+
+  if (image !== undefined) {
+    const imageMatch =
+      typeof image === "string" &&
+      image.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+=*)$/);
+
+    if (!imageMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Choose a PNG, JPEG, or WebP image.",
+      });
+    }
+
+    if (Buffer.from(imageMatch[2], "base64").length > 1024 * 1024) {
+      return res.status(413).json({
+        success: false,
+        message: "Images must be 1 MB or smaller.",
+      });
+    }
   }
 
   let conversation;
@@ -82,10 +103,16 @@ export const sendMessage = async (req, res) => {
       senderId,
       receiverId,
       message: messageText,
+      ...(image ? { image } : {}),
     });
 
     conversation.messages.push(newMessage._id);
     await conversation.save();
+
+    const io = req.app.get("io");
+    io.to(`user:${senderId}`)
+      .to(`user:${receiverId}`)
+      .emit("message:new", newMessage);
 
     return res.status(201).json({
       success: true,

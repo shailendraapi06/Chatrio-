@@ -206,8 +206,19 @@ function SideBar({
                 colorClass={avatarColors[index % avatarColors.length]}
                 online={onlineUsers.has(String(contact.id))}
               />
-              <span className="truncate text-[13px] font-semibold text-[#34343a]">
-                {contact.username}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[13px] font-semibold text-[#34343a]">
+                  {contact.username}
+                </span>
+                <span
+                  className={`text-[10px] leading-3 ${
+                    onlineUsers.has(String(contact.id))
+                      ? "text-green-700"
+                      : "text-[#88838a]"
+                  }`}
+                >
+                  {onlineUsers.has(String(contact.id)) ? "Online" : "Offline"}
+                </span>
               </span>
             </button>
           ))}

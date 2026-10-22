@@ -51,6 +51,33 @@ function Home() {
         });
       }
     };
+    const handleNewMessage = (message) => {
+      const currentUserId = String(userData.id);
+      const senderId = String(message.senderId);
+      const contactId =
+        senderId === currentUserId
+          ? String(message.receiverId)
+          : senderId;
+
+      setMessagesByContact((currentMessages) => {
+        const existingMessages = currentMessages[contactId] || [];
+        if (
+          existingMessages.some(
+            (existingMessage) => existingMessage._id === message._id,
+          )
+        ) {
+          return currentMessages;
+        }
+
+        return {
+          ...currentMessages,
+          [contactId]: [...existingMessages, message].sort(
+            (first, second) =>
+              new Date(first.createdAt || 0) - new Date(second.createdAt || 0),
+          ),
+        };
+      });
+    };
     const handleConnectionError = (socketError) => {
       setPresenceError(socketError.message || "Presence connection failed.");
     };
@@ -59,6 +86,7 @@ function Home() {
     socket.on("presence:initial", handleInitialPresence);
     socket.on("presence:online", handleUserOnline);
     socket.on("presence:offline", handleUserOffline);
+    socket.on("message:new", handleNewMessage);
     socket.on("connect_error", handleConnectionError);
     socket.on("connect", handleConnect);
 
@@ -66,6 +94,7 @@ function Home() {
       socket.off("presence:initial", handleInitialPresence);
       socket.off("presence:online", handleUserOnline);
       socket.off("presence:offline", handleUserOffline);
+      socket.off("message:new", handleNewMessage);
       socket.off("connect_error", handleConnectionError);
       socket.off("connect", handleConnect);
       socket.disconnect();
@@ -153,10 +182,10 @@ function Home() {
     }
   };
 
-  const handleSendMessage = async (text) => {
+  const handleSendMessage = async (message) => {
     const savedMessage = await sendConversationMessage(
       selectedContact.id,
-      text,
+      message,
     );
     setMessagesByContact((currentMessages) => {
       const existingMessages = currentMessages[selectedContact.id] || [];
