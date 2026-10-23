@@ -9,6 +9,7 @@ import {
   IoDownloadOutline,
   IoRemoveOutline,
   IoAddOutline,
+  IoTrashOutline,
 } from "react-icons/io5";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
@@ -157,6 +158,8 @@ function MessageArea({
   error,
   isOnline,
   onSendMessage,
+  onDeleteChat,
+  onDeleteMessage,
   onBack,
 }) {
   const [draft, setDraft] = useState("");
@@ -168,6 +171,10 @@ function MessageArea({
   const [imagePreview, setImagePreview] = useState("");
   const [imageZoom, setImageZoom] = useState(1);
   const [imageViewerError, setImageViewerError] = useState("");
+  const [deletingChat, setDeletingChat] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingMessageId, setDeletingMessageId] = useState("");
+  const [deleteMessageError, setDeleteMessageError] = useState("");
   const imageInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const swipeStartRef = useRef(null);
@@ -214,6 +221,53 @@ function MessageArea({
       setSendError(error.message || "Unable to send message.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const deleteChat = async () => {
+    if (
+      deletingChat ||
+      !window.confirm(
+        `Delete your chat history with ${contact.username}? This only affects your account.`,
+      )
+    ) {
+      return;
+    }
+
+    setDeletingChat(true);
+    setDeleteError("");
+    try {
+      await onDeleteChat();
+    } catch (error) {
+      setDeleteError(error.message || "Unable to delete this chat.");
+    } finally {
+      setDeletingChat(false);
+    }
+  };
+
+  const deleteMessage = async (message) => {
+    const messageId = message._id || message.id;
+    if (
+      !messageId ||
+      deletingMessageId ||
+      !window.confirm("Delete this message from your history only?")
+    ) {
+      return;
+    }
+
+    setDeletingMessageId(String(messageId));
+    setDeleteMessageError("");
+    try {
+      await onDeleteMessage(messageId);
+      if (String(replyTo?._id) === String(messageId)) {
+        setReplyTo(null);
+      }
+    } catch (error) {
+      setDeleteMessageError(
+        error.message || "Unable to delete this message.",
+      );
+    } finally {
+      setDeletingMessageId("");
     }
   };
 
@@ -359,13 +413,27 @@ function MessageArea({
             {isOnline ? "Online" : "Offline"}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={deleteChat}
+          disabled={deletingChat}
+          aria-label={deletingChat ? "Deleting chat" : "Delete chat history"}
+          title="Delete chat history from your account"
+          className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#743d55] transition hover:bg-white/30 disabled:cursor-wait disabled:opacity-60"
+        >
+          <IoTrashOutline aria-hidden="true" className="h-5 w-5" />
+        </button>
       </header>
 
       <div
         className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
         aria-live="polite"
       >
-        {loading ? (
+        {deleteError ? (
+          <p className="pt-3 text-center text-sm text-rose-700" role="alert">
+            {deleteError}
+          </p>
+        ) : loading ? (
           <p className="pt-6 text-center text-sm text-[#62626b]">
             Loading messages...
           </p>
@@ -503,6 +571,16 @@ function MessageArea({
                       className="h-4 w-4"
                     />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMessage(message)}
+                    disabled={Boolean(deletingMessageId)}
+                    aria-label="Delete this message from your history"
+                    title="Delete for me"
+                    className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#743d55] transition hover:bg-white/70 disabled:cursor-wait disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                  >
+                    <IoTrashOutline aria-hidden="true" className="h-4 w-4" />
+                  </button>
                   {isCurrentUser && (
                     <Avatar
                       name={senderName}
@@ -522,6 +600,11 @@ function MessageArea({
         {sendError && (
           <p className="mx-2 mb-2 text-xs text-rose-700" role="alert">
             {sendError}
+          </p>
+        )}
+        {deleteMessageError && (
+          <p className="mx-2 mb-2 text-xs text-rose-700" role="alert">
+            {deleteMessageError}
           </p>
         )}
         {replyTo && (

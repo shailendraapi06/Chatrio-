@@ -8,6 +8,8 @@ import Signup from "./pages/signup.jsx";
 import Profile from "./pages/profile.jsx";
 import { fetchCurrentUser, logoutUser } from "./redux/userSlice.js";
 import {
+  deleteConversation,
+  deleteMessageForMe,
   fetchContacts,
   fetchConversationMessages,
   sendConversationMessage,
@@ -300,6 +302,67 @@ function Home() {
     });
   };
 
+  const handleDeleteChat = async () => {
+    const contactId = selectedContact?.id;
+    if (!contactId) {
+      return;
+    }
+
+    await deleteConversation(contactId);
+    setMessagesByContact((currentMessages) => ({
+      ...currentMessages,
+      [contactId]: [],
+    }));
+    setContacts((currentContacts) =>
+      currentContacts.map((contact) =>
+        String(contact.id) === String(contactId)
+          ? { ...contact, lastMessage: null }
+          : contact,
+      ),
+    );
+    navigate("/");
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    const contactId = selectedContact?.id;
+    if (!contactId) {
+      return;
+    }
+
+    await deleteMessageForMe(contactId, messageId);
+    const remainingMessages = (messagesByContact[contactId] || []).filter(
+      (message) => String(message._id) !== String(messageId),
+    );
+    setMessagesByContact((currentMessages) => ({
+      ...currentMessages,
+      [contactId]: remainingMessages,
+    }));
+    const latestMessage = remainingMessages.at(-1);
+    setContacts((currentContacts) =>
+      currentContacts.map((contact) =>
+        String(contact.id) === String(contactId)
+          ? {
+              ...contact,
+              lastMessage: latestMessage
+                ? {
+                    message: latestMessage.message || "",
+                    image: Boolean(latestMessage.image),
+                    createdAt: latestMessage.createdAt,
+                    expiresAt: latestMessage.expiresAt,
+                    senderId: latestMessage.senderId,
+                  }
+                : null,
+            }
+          : contact,
+      ),
+    );
+    fetchContacts()
+      .then(setContacts)
+      .catch((error) => {
+        console.error("Unable to refresh contacts after deleting a message:", error);
+      });
+  };
+
   if (
     !userData &&
     (sessionStatus === "idle" || sessionStatus === "loading")
@@ -356,6 +419,8 @@ function Home() {
           error={messagesError}
           isOnline={onlineUsers.has(String(selectedContact.id))}
           onSendMessage={handleSendMessage}
+          onDeleteChat={handleDeleteChat}
+          onDeleteMessage={handleDeleteMessage}
           onBack={() => navigate("/")}
         />
       ) : contactId && (contactsLoading || contactsError) ? (

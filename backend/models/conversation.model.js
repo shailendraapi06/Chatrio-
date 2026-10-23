@@ -21,6 +21,36 @@ const conversationSchema = new mongoose.Schema(
         ref: "Message",
       },
     ],
+    clearedAtByUser: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        clearedAt: {
+          type: Date,
+          required: true,
+        },
+        _id: false,
+      },
+    ],
+    deletedMessagesByUser: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        messageIds: [
+          {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Message",
+          },
+        ],
+        _id: false,
+      },
+    ],
     participantKey: {
       type: String,
       required: true,

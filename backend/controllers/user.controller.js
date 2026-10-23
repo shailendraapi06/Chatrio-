@@ -1,12 +1,24 @@
 import mongoose from "mongoose";
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
+import Conversation from "../models/conversation.model.js";
 
 export const getContacts = async (req, res) => {
   try {
     const currentUserId = new mongoose.Types.ObjectId(req.userId);
     const now = new Date();
     const ttlCutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+    const conversations = await Conversation.find({
+      participants: currentUserId,
+    })
+      .select("participants clearedAtByUser deletedMessagesByUser")
+      .lean();
+    const hiddenMessageIds = conversations.flatMap(
+      (conversation) =>
+        (conversation.deletedMessagesByUser || []).find(
+          (entry) => entry.userId.equals(currentUserId),
+        )?.messageIds || [],
+    );
     const [users, latestMessages] = await Promise.all([
       User.find({ _id: { $ne: req.userId } })
         .select("username image")
@@ -16,6 +28,9 @@ export const getContacts = async (req, res) => {
         {
           $match: {
             $and: [
+              ...(hiddenMessageIds.length
+                ? [{ _id: { $nin: hiddenMessageIds } }]
+                : []),
               {
                 $or: [
                   { senderId: currentUserId },
@@ -77,11 +92,25 @@ export const getContacts = async (req, res) => {
         },
       ]),
     ]);
+    const clearedAtByUser = new Map();
+    for (const conversation of conversations) {
+      const otherUserId = conversation.participants.find(
+        (participantId) => !participantId.equals(currentUserId),
+      );
+      const clearedAt = (conversation.clearedAtByUser || []).find(
+        (entry) => entry.userId.equals(currentUserId),
+      )?.clearedAt;
+      if (otherUserId && clearedAt) {
+        clearedAtByUser.set(otherUserId.toString(), clearedAt);
+      }
+    }
     const latestMessageByUser = new Map(
-      latestMessages.map(({ _id, lastMessage }) => [
-        _id.toString(),
-        lastMessage,
-      ]),
+      latestMessages
+        .filter(({ _id, lastMessage }) => {
+          const clearedAt = clearedAtByUser.get(_id.toString());
+          return !clearedAt || lastMessage.createdAt > clearedAt;
+        })
+        .map(({ _id, lastMessage }) => [_id.toString(), lastMessage]),
     );
     const contacts = users.map((user) => ({
       id: user._id.toString(),

@@ -46,3 +46,17 @@ export async function sendConversationMessage(userId, message) {
   );
   return result.newMessage;
 }
+
+export async function deleteConversation(userId) {
+  return apiRequest(
+    `/api/v1/message/delete/${encodeURIComponent(userId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function deleteMessageForMe(userId, messageId) {
+  return apiRequest(
+    `/api/v1/message/${encodeURIComponent(userId)}/message/${encodeURIComponent(messageId)}`,
+    { method: "DELETE" },
+  );
+}

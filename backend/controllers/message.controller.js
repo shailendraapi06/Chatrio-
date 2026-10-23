@@ -22,6 +22,15 @@ const activeMessageFilter = (now) => ({
     },
   ],
 });
+const visibleMessageFilter = (now, clearedAt, hiddenMessageIds = []) => ({
+  $and: [
+    activeMessageFilter(now),
+    ...(clearedAt ? [{ createdAt: { $gt: clearedAt } }] : []),
+    ...(hiddenMessageIds.length
+      ? [{ _id: { $nin: hiddenMessageIds } }]
+      : []),
+  ],
+});
 
 const findPrivateConversation = (firstUserId, secondUserId) =>
   Conversation.findOne({
@@ -99,11 +108,20 @@ export const sendMessage = async (req, res) => {
         .json({ success: false, message: "Recipient not found." });
     }
 
+    conversation = await findPrivateConversation(senderId, receiverId);
+    const clearedAt = (conversation?.clearedAtByUser || []).find(
+      (entry) => String(entry.userId) === String(senderId),
+    )?.clearedAt;
+    const hiddenMessageIds =
+      (conversation?.deletedMessagesByUser || []).find(
+        (entry) => String(entry.userId) === String(senderId),
+      )?.messageIds || [];
+
     let repliedMessage = null;
     if (replyToId) {
       repliedMessage = await Message.findOne({
         $and: [
-          activeMessageFilter(new Date()),
+          visibleMessageFilter(new Date(), clearedAt, hiddenMessageIds),
           {
             _id: replyToId,
             $or: [
@@ -122,7 +140,6 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-    conversation = await findPrivateConversation(senderId, receiverId);
     if (!conversation) {
       const participantKey = [senderId, receiverId]
         .map(normalizedId)
@@ -169,7 +186,7 @@ export const sendMessage = async (req, res) => {
       await newMessage.populate({
         path: "replyTo.messageId",
         select: "_id message image senderId expiresAt",
-        match: activeMessageFilter(new Date()),
+        match: visibleMessageFilter(new Date(), clearedAt, hiddenMessageIds),
       });
     }
 
@@ -237,6 +254,13 @@ export const getMessage = async (req, res) => {
       currentUserId,
       otherUserId,
     );
+    const clearedAt = (conversation?.clearedAtByUser || []).find(
+      (entry) => String(entry.userId) === String(currentUserId),
+    )?.clearedAt;
+    const hiddenMessageIds =
+      (conversation?.deletedMessagesByUser || []).find(
+        (entry) => String(entry.userId) === String(currentUserId),
+      )?.messageIds || [];
     const now = new Date();
     const before =
       typeof req.query.before === "string" ? new Date(req.query.before) : null;
@@ -254,7 +278,7 @@ export const getMessage = async (req, res) => {
             { senderId: otherUserId, receiverId: currentUserId },
           ],
         },
-        activeMessageFilter(now),
+        visibleMessageFilter(now, clearedAt, hiddenMessageIds),
         ...(before ? [{ createdAt: { $lt: before } }] : []),
       ],
     })
@@ -263,7 +287,7 @@ export const getMessage = async (req, res) => {
       .populate({
         path: "replyTo.messageId",
         select: "_id message image senderId expiresAt",
-        match: activeMessageFilter(now),
+        match: visibleMessageFilter(now, clearedAt, hiddenMessageIds),
       })
       .lean();
     const hasMore = messages.length > 100;
@@ -291,6 +315,126 @@ export const getMessage = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to fetch messages.",
+    });
+  }
+};
+
+export const deleteConversationForUser = async (req, res) => {
+  const currentUserId = req.userId;
+  const otherUserId = req.params.id;
+
+  if (!isValidObjectId(currentUserId) || !isValidObjectId(otherUserId)) {
+    return res.status(400).json({ success: false, message: "Invalid user ID." });
+  }
+
+  if (normalizedId(currentUserId) === normalizedId(otherUserId)) {
+    return res.status(400).json({
+      success: false,
+      message: "A conversation requires two different users.",
+    });
+  }
+
+  try {
+    const conversation = await findPrivateConversation(
+      currentUserId,
+      otherUserId,
+    );
+    if (conversation) {
+      const clearedAt = new Date();
+      const entries = conversation.clearedAtByUser || [];
+      const entry = entries.find(
+        (item) => String(item.userId) === String(currentUserId),
+      );
+      if (entry) {
+        entry.clearedAt = clearedAt;
+      } else {
+        entries.push({
+          userId: currentUserId,
+          clearedAt,
+        });
+        conversation.clearedAtByUser = entries;
+      }
+      await conversation.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Chat deleted from your history.",
+    });
+  } catch (error) {
+    console.error("Error deleting conversation history:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to delete this chat.",
+    });
+  }
+};
+
+export const deleteMessageForUser = async (req, res) => {
+  const currentUserId = req.userId;
+  const otherUserId = req.params.id;
+  const messageId = req.params.messageId;
+
+  if (
+    !isValidObjectId(currentUserId) ||
+    !isValidObjectId(otherUserId) ||
+    !isValidObjectId(messageId)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid user or message ID.",
+    });
+  }
+
+  if (normalizedId(currentUserId) === normalizedId(otherUserId)) {
+    return res.status(400).json({
+      success: false,
+      message: "A conversation requires two different users.",
+    });
+  }
+
+  try {
+    const [conversation, message] = await Promise.all([
+      findPrivateConversation(currentUserId, otherUserId),
+      Message.findOne({
+        _id: messageId,
+        $or: [
+          { senderId: currentUserId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: currentUserId },
+        ],
+      }).select("_id"),
+    ]);
+
+    if (!conversation || !message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found in this conversation.",
+      });
+    }
+
+    const entries = conversation.deletedMessagesByUser || [];
+    let entry = entries.find(
+      (item) => String(item.userId) === String(currentUserId),
+    );
+    if (!entry) {
+      entry = { userId: currentUserId, messageIds: [] };
+      entries.push(entry);
+      conversation.deletedMessagesByUser = entries;
+    }
+    if (!entry.messageIds.some((id) => String(id) === String(messageId))) {
+      entry.messageIds.push(messageId);
+    }
+    await conversation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Message deleted from your history.",
+    });
+  } catch (error) {
+    console.error("Error deleting message from user history:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to delete this message.",
     });
   }
 };
