@@ -1,4 +1,6 @@
-const configuredServerUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:8000";
+const configuredServerUrl =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.PROD ? window.location.origin : "http://localhost:8000");
 
 export const serverUrl = configuredServerUrl.replace(/\/+$/, "");
 
