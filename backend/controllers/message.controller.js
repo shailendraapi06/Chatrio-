@@ -2,12 +2,6 @@ import mongoose from "mongoose";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
-import AttachmentCleanup from "../models/attachmentCleanup.model.js";
-import {
-  deleteChatImage,
-  isCloudinaryConfigured,
-  uploadChatImage,
-} from "../services/cloudinary.js";
 
 const isValidObjectId = (id) => mongoose.isObjectIdOrHexString(id);
 const normalizedId = (id) => new mongoose.Types.ObjectId(id).toString();
@@ -96,8 +90,6 @@ export const sendMessage = async (req, res) => {
   let conversation;
   let createdConversation = false;
   let newMessage;
-  let uploadedImage;
-  let cleanupJob;
 
   try {
     const recipient = await User.findById(receiverId).select("_id");
@@ -130,25 +122,6 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-    if (image) {
-      if (!isCloudinaryConfigured()) {
-        return res.status(503).json({
-          success: false,
-          message:
-            "Image sending is unavailable until Cloudinary storage is configured.",
-        });
-      }
-      try {
-        uploadedImage = await uploadChatImage(image);
-      } catch (storageError) {
-        console.error("Chat image upload failed:", storageError.message);
-        return res.status(502).json({
-          success: false,
-          message: "Image storage is unavailable. Please try again.",
-        });
-      }
-    }
-
     conversation = await findPrivateConversation(senderId, receiverId);
     if (!conversation) {
       const participantKey = [senderId, receiverId]
@@ -176,24 +149,12 @@ export const sendMessage = async (req, res) => {
 
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + MESSAGE_TTL_MS);
-    if (uploadedImage) {
-      cleanupJob = await AttachmentCleanup.create({
-        messageId: new mongoose.Types.ObjectId(),
-        publicId: uploadedImage.publicId,
-        dueAt: expiresAt,
-      });
-    }
 
     newMessage = await Message.create({
       senderId,
       receiverId,
       message: messageText,
-      ...(uploadedImage
-        ? {
-            image: uploadedImage.url,
-            attachmentPublicId: uploadedImage.publicId,
-          }
-        : {}),
+      ...(image ? { image } : {}),
       createdAt,
       expiresAt,
       ...(repliedMessage
@@ -204,10 +165,6 @@ export const sendMessage = async (req, res) => {
           }
         : {}),
     });
-    if (cleanupJob) {
-      cleanupJob.messageId = newMessage._id;
-      await cleanupJob.save();
-    }
     if (repliedMessage) {
       await newMessage.populate({
         path: "replyTo.messageId",
@@ -245,27 +202,6 @@ export const sendMessage = async (req, res) => {
         console.error("Unable to remove an empty conversation:", cleanupError);
       }
     }
-    if (uploadedImage) {
-      if (cleanupJob) {
-        try {
-          await AttachmentCleanup.updateOne(
-            { _id: cleanupJob._id },
-            { $set: { dueAt: new Date(), nextAttemptAt: new Date() } },
-          );
-        } catch (cleanupError) {
-          console.error("Unable to schedule cleanup for an unsaved chat image:", cleanupError.message);
-        }
-      }
-      try {
-        await deleteChatImage(uploadedImage.publicId);
-        if (cleanupJob) {
-          await AttachmentCleanup.deleteOne({ _id: cleanupJob._id });
-        }
-      } catch (cleanupError) {
-        console.error("Unable to remove an unsaved chat image; cleanup will be retried:", cleanupError.message);
-      }
-    }
-
     console.error("Error sending message:", error.message);
     return res.status(500).json({
       success: false,

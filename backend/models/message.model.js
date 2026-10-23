@@ -21,7 +21,7 @@ const messageSchema = new mongoose.Schema(
     image: {
       type: String,
       default: "",
-      maxlength: 2048,
+      maxlength: 1_400_000,
     },
     attachmentPublicId: {
       type: String,
