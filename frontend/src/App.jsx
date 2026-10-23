@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import MessageArea from "./components/messageArea.jsx";
 import SideBar from "./components/sideBar.jsx";
 import Login from "./pages/login.jsx";
@@ -17,9 +17,9 @@ import { connectPresenceSocket } from "./realtime/presenceSocket.js";
 function Home() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { contactId } = useParams();
   const { userData, status, error, sessionStatus, sessionError } =
     useSelector((state) => state.user);
-  const [selectedContact, setSelectedContact] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState("");
@@ -28,6 +28,72 @@ function Home() {
   const [messagesError, setMessagesError] = useState("");
   const [onlineUsers, setOnlineUsers] = useState(() => new Set());
   const [presenceError, setPresenceError] = useState("");
+  const selectedContact = contacts.find(
+    (contact) => String(contact.id) === String(contactId),
+  ) || null;
+
+  useEffect(() => {
+    setMessagesByContact({});
+    setContacts([]);
+  }, [userData.id]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const expiries = [
+      ...Object.values(messagesByContact)
+        .flat()
+        .map((message) => new Date(message.expiresAt).getTime()),
+      ...contacts.map((contact) =>
+        new Date(contact.lastMessage?.expiresAt).getTime(),
+      ),
+    ].filter((expiry) => Number.isFinite(expiry) && expiry > now);
+
+    if (expiries.length === 0) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const currentTime = Date.now();
+      setMessagesByContact((currentMessages) =>
+        Object.fromEntries(
+          Object.entries(currentMessages).map(([contactKey, messages]) => [
+            contactKey,
+            messages.filter(
+              (message) =>
+                !message.expiresAt ||
+                new Date(message.expiresAt).getTime() > currentTime,
+            ),
+          ]),
+        ),
+      );
+      setContacts((currentContacts) =>
+        currentContacts.map((contact) =>
+          contact.lastMessage?.expiresAt &&
+          new Date(contact.lastMessage.expiresAt).getTime() <= currentTime
+            ? { ...contact, lastMessage: null }
+            : contact,
+        ),
+      );
+    }, Math.max(0, Math.min(...expiries) - now));
+
+    return () => window.clearTimeout(timeout);
+  }, [contacts, messagesByContact]);
+
+  useEffect(() => {
+    if (!contactId || contactsLoading || contactsError) {
+      return;
+    }
+
+    if (!selectedContact) {
+      navigate("/", { replace: true });
+    }
+  }, [
+    contactId,
+    contactsError,
+    contactsLoading,
+    navigate,
+    selectedContact,
+  ]);
 
   useEffect(() => {
     setOnlineUsers(new Set());
@@ -58,6 +124,36 @@ function Home() {
         senderId === currentUserId
           ? String(message.receiverId)
           : senderId;
+
+      setContacts((currentContacts) =>
+        currentContacts
+          .map((contact) =>
+            String(contact.id) === contactId
+              ? {
+                  ...contact,
+                  lastMessage: {
+                    message: message.message || "",
+                    image: Boolean(message.image),
+                    createdAt: message.createdAt,
+                    expiresAt: message.expiresAt,
+                    senderId,
+                  },
+                }
+              : contact,
+          )
+          .sort((first, second) => {
+            const firstTime = new Date(
+              first.lastMessage?.createdAt || 0,
+            ).getTime();
+            const secondTime = new Date(
+              second.lastMessage?.createdAt || 0,
+            ).getTime();
+            return (
+              secondTime - firstTime ||
+              first.username.localeCompare(second.username)
+            );
+          }),
+      );
 
       setMessagesByContact((currentMessages) => {
         const existingMessages = currentMessages[contactId] || [];
@@ -140,7 +236,7 @@ function Home() {
     setMessagesError("");
 
     fetchConversationMessages(selectedContact.id)
-      .then((messages) => {
+      .then(({ messages }) => {
         if (active) {
           setMessagesByContact((currentMessages) => ({
             ...currentMessages,
@@ -173,7 +269,11 @@ function Home() {
     return () => {
       active = false;
     };
-  }, [selectedContact]);
+  }, [selectedContact?.id]);
+
+  const handleSelectContact = (contact) => {
+    navigate(`/chat/${encodeURIComponent(contact.id)}`);
+  };
 
   const handleLogout = async () => {
     const result = await dispatch(logoutUser());
@@ -235,7 +335,7 @@ function Home() {
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#e9edf4] md:flex-row">
       <SideBar
-        className={selectedContact ? "hidden md:flex" : "flex"}
+        className={contactId ? "hidden md:flex" : "flex"}
         userData={userData}
         contacts={contacts}
         contactsLoading={contactsLoading}
@@ -245,7 +345,7 @@ function Home() {
         onLogout={handleLogout}
         logoutLoading={status === "loading"}
         selectedContact={selectedContact}
-        onSelectContact={setSelectedContact}
+        onSelectContact={handleSelectContact}
       />
       {selectedContact ? (
         <MessageArea
@@ -256,8 +356,14 @@ function Home() {
           error={messagesError}
           isOnline={onlineUsers.has(String(selectedContact.id))}
           onSendMessage={handleSendMessage}
-          onBack={() => setSelectedContact(null)}
+          onBack={() => navigate("/")}
         />
+      ) : contactId && (contactsLoading || contactsError) ? (
+        <section className="flex min-h-0 flex-1 items-center justify-center border-l border-[#d9dde5] px-6 text-center">
+          <p className="text-sm font-medium text-[#a83d69]">
+            {contactsError || "Restoring your conversation..."}
+          </p>
+        </section>
       ) : (
         <section className="hidden min-h-0 flex-1 items-center justify-center border-l border-[#d9dde5] px-6 text-center md:flex">
           <div>
@@ -322,7 +428,7 @@ function ProfileRoute() {
 
 function App() {
   const dispatch = useDispatch();
-  const { userData } = useSelector((state) => state.user);
+  const { userData, sessionStatus } = useSelector((state) => state.user);
   const hasCheckedSession = useRef(false);
 
   useEffect(() => {
@@ -331,6 +437,16 @@ function App() {
       dispatch(fetchCurrentUser());
     }
   }, [dispatch]);
+
+  const protectedHome = userData ? (
+    <Home />
+  ) : sessionStatus === "idle" || sessionStatus === "loading" ? (
+    <main className="flex min-h-screen items-center justify-center bg-[#fff0f5] text-sm font-medium text-[#a83d69]">
+      Loading your account...
+    </main>
+  ) : (
+    <Navigate to="/login" replace />
+  );
 
   return (
     <Routes>
@@ -344,7 +460,11 @@ function App() {
       />
       <Route
         path="/"
-        element={userData ? <Home /> : <Navigate to="/login" replace />}
+        element={protectedHome}
+      />
+      <Route
+        path="/chat/:contactId"
+        element={protectedHome}
       />
       <Route
         path="/profile"

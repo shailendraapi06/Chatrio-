@@ -15,7 +15,7 @@ const avatarColors = [
   "bg-[#e7d9ef] text-[#6e537c]",
 ];
 
-function ContactAvatar({ contact, colorClass, online }) {
+function ContactAvatar({ contact, colorClass, online, className = "" }) {
   const initials = contact.username
     .split(/\s+/)
     .map((part) => part[0])
@@ -24,7 +24,7 @@ function ContactAvatar({ contact, colorClass, online }) {
     .toUpperCase();
 
   return (
-    <span className="relative h-[38px] w-[38px] shrink-0">
+    <span className={`relative h-[38px] w-[38px] shrink-0 ${className}`}>
       {contact.image ? (
         <img
           src={contact.image}
@@ -62,15 +62,53 @@ function SideBar({
   onSelectContact,
   className = "",
 }) {
-  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const username = userData?.username || "Chatrio member";
-  const filteredContacts = useMemo(
+  const onlineContacts = useMemo(
     () =>
-      contacts.filter((contact) =>
-        contact.username.toLowerCase().includes(query.trim().toLowerCase()),
+      contacts.filter(
+        (contact) =>
+          String(contact.id) !== String(userData?.id) &&
+          onlineUsers.has(String(contact.id)),
       ),
-    [query],
+    [contacts, onlineUsers, userData?.id],
+  );
+  const filteredContacts = useMemo(
+    () => {
+      const normalize = (value) =>
+        value
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLocaleLowerCase();
+      const searchTerms = normalize(query.trim()).split(/\s+/).filter(Boolean);
+
+      return contacts
+        .map((contact) => {
+          const normalizedUsername = normalize(contact.username);
+          const matches = searchTerms.every((term) =>
+            normalizedUsername.includes(term),
+          );
+          let rank = 0;
+          if (searchTerms.length > 0) {
+            rank =
+              normalizedUsername === searchTerms.join(" ")
+                ? 0
+                : normalizedUsername.startsWith(searchTerms[0])
+                  ? 1
+                  : 2;
+          }
+          return { contact, matches, rank };
+        })
+        .filter(({ matches }) => matches)
+        .sort(
+          (first, second) =>
+            first.rank - second.rank ||
+            contacts.indexOf(first.contact) - contacts.indexOf(second.contact),
+        )
+        .map(({ contact }) => contact);
+    },
+    [contacts, query],
   );
   const hasSearchQuery = query.trim().length > 0;
 
@@ -78,7 +116,7 @@ function SideBar({
     <aside
       className={`relative h-dvh w-full shrink-0 flex-col overflow-hidden bg-[#f8f5f7] md:w-[30%] md:min-w-[280px] md:max-w-[320px] ${className}`}
     >
-      <header className="relative z-10 h-[200px] shrink-0 rounded-b-[78px] bg-[#f7bfd3] px-4 pt-9 shadow-[0_6px_9px_rgba(40,40,50,0.22)]">
+      <header className="relative z-10 flex h-[220px] shrink-0 flex-col rounded-b-[78px] bg-[#f7bfd3] px-4 pb-5 pt-7 shadow-[0_6px_9px_rgba(40,40,50,0.22)]">
         <div>
           <Link
             to="/"
@@ -117,20 +155,20 @@ function SideBar({
           Hii, {username}
         </h1>
 
-        <div className="mt-6 flex h-[42px] items-center">
+        <div className="mt-4 flex h-12 min-w-0 shrink-0 items-center gap-2">
           {searchOpen ? (
-            <label className="flex h-[42px] w-full items-center gap-2 rounded-full bg-white px-3 shadow-[0_5px_8px_rgba(40,40,50,0.2)]">
+            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-3 shadow-[0_3px_6px_rgba(40,40,50,0.16)]">
               <IoSearchOutline
                 aria-hidden="true"
-                className="h-5 w-5 shrink-0 text-[#34343a]"
+                className="h-4 w-4 shrink-0 text-[#34343a]"
               />
               <input
                 autoFocus
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search"
-                aria-label="Search contacts"
+                placeholder="Search people or chats"
+                aria-label="Search people or chats"
                 className="min-w-0 flex-1 bg-transparent text-sm text-[#34343a] outline-none placeholder:text-[#88838a]"
               />
               <button
@@ -140,20 +178,45 @@ function SideBar({
                   setQuery("");
                 }}
                 aria-label="Close search"
-                className="text-[#62626b]"
+                className="shrink-0 text-[#62626b]"
               >
                 <IoCloseOutline aria-hidden="true" className="h-5 w-5" />
               </button>
             </label>
           ) : (
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Search contacts"
-              className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-white text-[#34343a] shadow-[0_5px_8px_rgba(40,40,50,0.2)] transition hover:-translate-y-0.5"
-            >
-              <IoSearchOutline aria-hidden="true" className="h-5 w-5" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Open search"
+                title="Search users and chats"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#34343a] shadow-[0_4px_8px_rgba(40,40,50,0.2)] transition hover:-translate-y-0.5"
+              >
+                <IoSearchOutline aria-hidden="true" className="h-4 w-4" />
+              </button>
+              <div
+                className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden py-1"
+                aria-label={`Online users, ${onlineContacts.length} online`}
+              >
+                {onlineContacts.map((contact, index) => (
+                  <button
+                    key={contact.id}
+                    type="button"
+                    onClick={() => onSelectContact(contact)}
+                    aria-label={`Open chat with ${contact.username}`}
+                    title={contact.username}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:-translate-y-0.5"
+                  >
+                    <ContactAvatar
+                      contact={contact}
+                      colorClass={avatarColors[index % avatarColors.length]}
+                      online
+                      className="h-10 w-10"
+                    />
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </header>
@@ -165,7 +228,7 @@ function SideBar({
             : "bg-[#f8f5f7] px-[9px] pt-3.5"
         }`}
       >
-        <div className={hasSearchQuery ? "flex flex-col" : "flex flex-col gap-3"}>
+        <div className="flex flex-col gap-2">
           {contactsLoading && (
             <p className="px-3 py-5 text-center text-sm text-[#62626b]">
               Loading contacts...
@@ -181,47 +244,59 @@ function SideBar({
               Presence unavailable: {presenceError}
             </p>
           )}
-          {!contactsLoading && !contactsError && filteredContacts.map((contact, index) => (
-            <button
-              key={contact.id}
-              type="button"
-              onClick={() => onSelectContact(contact)}
-              aria-pressed={selectedContact?.id === contact.id}
-              className={
-                hasSearchQuery
-                  ? `flex h-12 w-full shrink-0 items-center gap-2 border-b border-[#d8d8dc] px-1 text-left transition hover:bg-[#fff4f8] ${
-                      selectedContact?.id === contact.id
-                        ? "bg-[#fff0f5]"
-                        : ""
-                    }`
-                  : `flex h-[40px] w-full shrink-0 items-center gap-2 rounded-full bg-white pr-4 text-left shadow-[0_5px_8px_rgba(40,40,50,0.2)] transition hover:-translate-y-0.5 ${
-                      selectedContact?.id === contact.id
-                        ? "ring-2 ring-[#e576a3]"
-                        : ""
-                    }`
-              }
-            >
-              <ContactAvatar
-                contact={contact}
-                colorClass={avatarColors[index % avatarColors.length]}
-                online={onlineUsers.has(String(contact.id))}
-              />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13px] font-semibold text-[#34343a]">
-                  {contact.username}
+          {!contactsLoading &&
+            !contactsError &&
+            filteredContacts.map((contact, index) => (
+              <button
+                key={contact.id}
+                type="button"
+                onClick={() => onSelectContact(contact)}
+                aria-pressed={selectedContact?.id === contact.id}
+                className={`flex min-h-[56px] w-full shrink-0 items-center gap-2 rounded-xl bg-white px-2.5 py-2 text-left shadow-[0_3px_7px_rgba(40,40,50,0.12)] transition hover:bg-[#fff4f8] ${
+                  selectedContact?.id === contact.id
+                    ? "ring-2 ring-[#e576a3]"
+                    : ""
+                }`}
+              >
+                <ContactAvatar
+                  contact={contact}
+                  colorClass={avatarColors[index % avatarColors.length]}
+                  online={onlineUsers.has(String(contact.id))}
+                />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] font-semibold text-[#34343a]">
+                      {contact.username}
+                    </span>
+                    <span
+                      className={`shrink-0 text-[10px] leading-3 ${
+                        onlineUsers.has(String(contact.id))
+                          ? "text-green-700"
+                          : "text-[#88838a]"
+                      }`}
+                    >
+                      {contact.lastMessage
+                        ? new Date(
+                            contact.lastMessage.createdAt,
+                          ).toLocaleTimeString([], {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })
+                        : onlineUsers.has(String(contact.id))
+                          ? "Online"
+                          : "Offline"}
+                    </span>
+                  </span>
+                  <span className="truncate text-[11px] leading-4 text-[#77717a]">
+                    {contact.lastMessage
+                      ? `${String(contact.lastMessage.senderId) === String(userData?.id) ? "You: " : ""}${contact.lastMessage.message || (contact.lastMessage.image ? "Image" : "")}`
+                      : onlineUsers.has(String(contact.id))
+                        ? "Online"
+                        : "Offline"}
+                  </span>
                 </span>
-                <span
-                  className={`text-[10px] leading-3 ${
-                    onlineUsers.has(String(contact.id))
-                      ? "text-green-700"
-                      : "text-[#88838a]"
-                  }`}
-                >
-                  {onlineUsers.has(String(contact.id)) ? "Online" : "Offline"}
-                </span>
-              </span>
-            </button>
-          ))}
+              </button>
+            ))}
           {!contactsLoading &&
             !contactsError &&
             filteredContacts.length === 0 && (

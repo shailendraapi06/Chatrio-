@@ -1,18 +1,105 @@
+import mongoose from "mongoose";
 import User from "../models/user.model.js";
+import Message from "../models/message.model.js";
 
 export const getContacts = async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.userId } })
-      .select("username image")
-      .sort({ username: 1 })
-      .lean();
+    const currentUserId = new mongoose.Types.ObjectId(req.userId);
+    const now = new Date();
+    const ttlCutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+    const [users, latestMessages] = await Promise.all([
+      User.find({ _id: { $ne: req.userId } })
+        .select("username image")
+        .sort({ username: 1 })
+        .lean(),
+      Message.aggregate([
+        {
+          $match: {
+            $and: [
+              {
+                $or: [
+                  { senderId: currentUserId },
+                  { receiverId: currentUserId },
+                ],
+              },
+              {
+                $or: [
+                  { expiresAt: { $gt: now } },
+                  {
+                    $and: [
+                      {
+                        $or: [
+                          { expiresAt: { $exists: false } },
+                          { expiresAt: null },
+                        ],
+                      },
+                      { createdAt: { $gt: ttlCutoff } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { $sort: { createdAt: -1, _id: -1 } },
+        {
+          $group: {
+            _id: {
+              $cond: [
+                { $eq: ["$senderId", currentUserId] },
+                "$receiverId",
+                "$senderId",
+              ],
+            },
+            lastMessage: {
+              $first: {
+                message: "$message",
+                image: {
+                  $gt: [{ $strLenCP: { $ifNull: ["$image", ""] } }, 0],
+                },
+                createdAt: "$createdAt",
+                expiresAt: {
+                  $ifNull: [
+                    "$expiresAt",
+                    {
+                      $dateAdd: {
+                        startDate: "$createdAt",
+                        unit: "hour",
+                        amount: 12,
+                      },
+                    },
+                  ],
+                },
+                senderId: "$senderId",
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+    const latestMessageByUser = new Map(
+      latestMessages.map(({ _id, lastMessage }) => [
+        _id.toString(),
+        lastMessage,
+      ]),
+    );
+    const contacts = users.map((user) => ({
+      id: user._id.toString(),
+      username: user.username,
+      image: user.image,
+      lastMessage: latestMessageByUser.get(user._id.toString()) || null,
+    }));
+    contacts.sort((first, second) => {
+      const firstTime = new Date(first.lastMessage?.createdAt || 0).getTime();
+      const secondTime = new Date(second.lastMessage?.createdAt || 0).getTime();
+      return (
+        secondTime - firstTime ||
+        first.username.localeCompare(second.username)
+      );
+    });
 
     return res.status(200).json({
-      users: users.map((user) => ({
-        id: user._id.toString(),
-        username: user.username,
-        image: user.image,
-      })),
+      users: contacts,
     });
   } catch (error) {
     console.error("Error fetching contacts:", error);

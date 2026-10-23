@@ -9,6 +9,8 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
 import { attachPresence } from "./socket/presence.js";
+import Message from "./models/message.model.js";
+import { startAttachmentCleanupWorker } from "./services/attachmentCleanup.js";
 
 dotenv.config();
 
@@ -48,6 +50,11 @@ app.set("io", io);
 attachPresence(io);
 
 await connectDB();
+await Message.collection.createIndex(
+  { expiresAt: 1 },
+  { expireAfterSeconds: 0 },
+);
+startAttachmentCleanupWorker();
 httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

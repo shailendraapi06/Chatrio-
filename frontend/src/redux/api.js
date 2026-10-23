@@ -28,11 +28,12 @@ export async function fetchContacts() {
   return result.users;
 }
 
-export async function fetchConversationMessages(userId) {
+export async function fetchConversationMessages(userId, before) {
+  const query = before ? `?before=${encodeURIComponent(before)}` : "";
   const result = await apiRequest(
-    `/api/v1/message/get/${encodeURIComponent(userId)}`,
+    `/api/v1/message/get/${encodeURIComponent(userId)}${query}`,
   );
-  return result.messages;
+  return result;
 }
 
 export async function sendConversationMessage(userId, message) {
